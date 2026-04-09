@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Benchmark runner for vLLM OpenAI-compatible endpoints."""
+"""Benchmark runner for OpenAI-compatible endpoints (vLLM, sglang, llama.cpp, Ollama, etc.)."""
 
 import argparse
 import json
@@ -20,9 +20,28 @@ except ImportError:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Benchmark a vLLM OpenAI-compatible endpoint.")
+    parser = argparse.ArgumentParser(
+        description="Benchmark any OpenAI-compatible inference endpoint.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    # endpoint
     parser.add_argument("--api-base", required=True, help="Base URL, e.g. http://localhost:8027/v1")
-    parser.add_argument("--model", required=True, help="Model name as served (e.g. gemma-4-31b)")
+
+    # runtime metadata
+    parser.add_argument("--runtime", required=True, help="Runtime name, e.g. vllm, sglang, llama.cpp, mlx, ollama")
+    parser.add_argument("--runtime-version", default=None, help="Runtime version string, e.g. 0.19.0")
+
+    # model metadata
+    parser.add_argument("--model", required=True, help="Model name as served, e.g. gemma-4-31b")
+    parser.add_argument("--model-dtype", default=None, help="Model dtype, e.g. bfloat16, float16, int4")
+    parser.add_argument("--model-quant", default=None, help="Quantization scheme if applicable, e.g. AWQ, GPTQ, Q4_K_M")
+    parser.add_argument("--model-tp", type=int, default=None, help="Tensor parallel size")
+    parser.add_argument("--model-max-ctx", type=int, default=None, help="Configured max context length")
+
+    # hardware metadata (free-form; auto-populated from platform but overridable)
+    parser.add_argument("--hw-label", default=None, help="Human-readable hardware label, e.g. '8x A100-SXM4-80GB'")
+
+    # benchmark inputs
     parser.add_argument("--prompts", default="benchmark_prompts_50.json", help="Prompt corpus JSON")
     parser.add_argument("--spec", default="benchmark_spec.json", help="Benchmark spec JSON")
     parser.add_argument("--repeats", type=int, default=1)
@@ -120,16 +139,17 @@ def run_case(client: OpenAI, model: str, prompt_item: dict) -> dict:
 
     elapsed = round(end_time - start, 3) if end_time else None
 
-    ttft = None
+    ttft_s = None
     generation_tps = None
-    prompt_tps = None
+    # prompt_tps is estimated from TTFT — less reliable than MLX's native measurement
+    prompt_tps_estimated = None
 
     if first_token_time is not None:
-        ttft = round(first_token_time - start, 3)
+        ttft_s = round(first_token_time - start, 3)
         if end_time is not None and generation_tokens and (end_time - first_token_time) > 0:
             generation_tps = round(generation_tokens / (end_time - first_token_time), 3)
-    if prompt_tokens and ttft and ttft > 0:
-        prompt_tps = round(prompt_tokens / ttft, 3)
+    if prompt_tokens and ttft_s and ttft_s > 0:
+        prompt_tps_estimated = round(prompt_tokens / ttft_s, 3)
 
     return {
         "id": prompt_item["id"],
@@ -137,10 +157,11 @@ def run_case(client: OpenAI, model: str, prompt_item: dict) -> dict:
         "max_tokens": prompt_item["max_tokens"],
         "elapsed_s": elapsed,
         "prompt_tokens": prompt_tokens,
-        "prompt_tps": prompt_tps,
+        "prompt_tps": prompt_tps_estimated,
+        "prompt_tps_source": "estimated_from_ttft" if prompt_tps_estimated is not None else None,
         "generation_tokens": generation_tokens,
         "generation_tps": generation_tps,
-        "ttft_s": ttft,
+        "ttft_s": ttft_s,
         "peak_memory_gb": None,  # not available via API
         "error": error,
     }
@@ -214,7 +235,21 @@ def main() -> int:
             "host": get_host_metadata(),
             "api_base": args.api_base,
         },
-        "model": args.model,
+        "runtime": {
+            "name": args.runtime,
+            "version": args.runtime_version,
+        },
+        "model": {
+            "served_name": args.model,
+            "dtype": args.model_dtype,
+            "quant": args.model_quant,
+            "tensor_parallel": args.model_tp,
+            "max_context": args.model_max_ctx,
+        },
+        "hardware": {
+            "label": args.hw_label,
+            "hostname": platform.node(),
+        },
         "prompt_file": str(Path(args.prompts).resolve()),
         "spec_file": str(Path(args.spec).resolve()),
         "repeats": args.repeats,
@@ -230,12 +265,16 @@ def main() -> int:
     print(
         f"benchmark_id={spec.get('benchmark_id')} "
         f"benchmark_version={spec.get('benchmark_version')} "
-        f"runner_version=vllm-0.1.0"
+        f"runner=openai_compat-0.1.0"
     )
     print(
+        f"runtime={args.runtime} version={args.runtime_version} "
+        f"model={args.model} dtype={args.model_dtype} tp={args.model_tp}"
+    )
+    print(
+        f"hardware={args.hw_label or platform.node()} "
         f"timestamp_utc={payload['run']['timestamp_utc']} "
-        f"git_commit={payload['run']['git_commit']} "
-        f"hostname={payload['run']['host']['hostname']}"
+        f"git_commit={payload['run']['git_commit']}"
     )
     for row in payload["summary"]:
         print(
