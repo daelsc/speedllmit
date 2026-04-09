@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Benchmark runner for OpenAI-compatible endpoints (vLLM, sglang, llama.cpp, Ollama, etc.)."""
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
