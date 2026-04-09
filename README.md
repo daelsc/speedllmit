@@ -73,7 +73,13 @@ python3 runners/openai_compat_benchmark_suite.py \
 ### `mlx_benchmark_suite.py`
 
 Apple Silicon only. Invokes `mlx_vlm.generate` as a subprocess and parses stdout.
-Captures prompt TPS natively and peak memory. Serial only.
+Captures prompt TPS natively, peak memory, and run-level aggregate generation throughput.
+Supports the same benchmark modes as the API runner:
+- fixed concurrency: `--concurrency N`
+- explicit sweep: `--concurrency-sweep 1,2,4,8`
+- auto knee finding: `--concurrency-auto --concurrency-start 1 --saturation-threshold 0.05`
+
+For MLX, concurrency means simultaneous local subprocesses, not requests into a shared server.
 
 ```bash
 python3 runners/mlx_benchmark_suite.py \
@@ -84,18 +90,30 @@ python3 runners/mlx_benchmark_suite.py \
   --output-json results/speedfreak_gemma4_31b_mlx_bf16_tp1_c1_2026-04-09.json
 ```
 
+```bash
+python3 runners/mlx_benchmark_suite.py \
+  --model /path/to/model-folder \
+  --spec benchmark_spec.json \
+  --prompts prompts/benchmark_prompts_50.json \
+  --concurrency-auto \
+  --concurrency-start 1 \
+  --saturation-threshold 0.05 \
+  --output-json results/speedfreak_gemma4_31b_mlx_bf16_auto_2026-04-09.json
+```
+
 ## Metrics
 
 | Metric | Description | Runners |
 |--------|-------------|---------|
-| `aggregate_generation_tps` | Total tokens / wall time — true server throughput | openai_compat |
+| `aggregate_generation_tps` | Total tokens / wall time across the whole run | both |
 | `avg_generation_tps` | Mean per-request generation speed | both |
 | `avg_ttft_s` | Mean time to first token | openai_compat |
 | `p95_ttft_s` | p95 TTFT under concurrent load | openai_compat (concurrency > 1) |
 | `peak_memory_gb` | Peak memory usage | mlx only |
 
-At `concurrency=1`, `aggregate_generation_tps` equals `avg_generation_tps`. The gap between
-them at higher concurrency reflects the server's batching efficiency gain.
+At `concurrency=1`, `aggregate_generation_tps` will usually be slightly below `avg_generation_tps`
+because it includes full end-to-end wall time across the suite. The gap at higher concurrency
+reflects batching efficiency for server runtimes.
 
 ## Versioning
 

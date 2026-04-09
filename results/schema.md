@@ -137,9 +137,9 @@ For a sweep (`--concurrency-sweep 1,4,8,16`) there is one entry per level.
   from TTFT and marks it `estimated_from_ttft`. Do not compare these directly.
 - **`peak_memory_gb`**: Only available from the MLX runner. Not queryable via API.
 - **`ttft_s`**: Only the openai_compat runner measures this.
-- **`aggregate_generation_tps`**: The most useful throughput metric for server comparison.
-  At concurrency=1 it equals `avg_generation_tps`. At higher concurrency it reflects
-  the server's batching efficiency.
+- **`aggregate_generation_tps`**: The most useful throughput metric for run-level comparison.
+  For serial MLX runs it is total emitted tokens divided by full benchmark wall time.
+  For API runners at higher concurrency it also reflects batching efficiency.
 - For apples-to-apples comparison across runtimes, use `aggregate_generation_tps` and
   `avg_generation_tps`. Everything else is backend-specific.
 
