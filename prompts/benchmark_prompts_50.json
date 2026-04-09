@@ -1,0 +1,302 @@
+[
+  {
+    "id": "short_explain_01",
+    "category": "short_explain",
+    "max_tokens": 64,
+    "prompt": "In 4 sentences, explain how a heat pump works for a homeowner."
+  },
+  {
+    "id": "short_explain_02",
+    "category": "short_explain",
+    "max_tokens": 64,
+    "prompt": "In 4 sentences, explain why vector databases are useful in retrieval-augmented generation."
+  },
+  {
+    "id": "short_explain_03",
+    "category": "short_explain",
+    "max_tokens": 64,
+    "prompt": "In 4 sentences, explain what memory bandwidth means in practical computing terms."
+  },
+  {
+    "id": "short_explain_04",
+    "category": "short_explain",
+    "max_tokens": 64,
+    "prompt": "In 4 sentences, explain the difference between latency and throughput in inference serving."
+  },
+  {
+    "id": "short_explain_05",
+    "category": "short_explain",
+    "max_tokens": 64,
+    "prompt": "In 4 sentences, explain what a quantized model is and why people use one."
+  },
+  {
+    "id": "short_explain_06",
+    "category": "short_explain",
+    "max_tokens": 64,
+    "prompt": "In 4 sentences, explain what unified memory means on Apple Silicon."
+  },
+  {
+    "id": "short_explain_07",
+    "category": "short_explain",
+    "max_tokens": 64,
+    "prompt": "In 4 sentences, explain why SSD speed can matter when loading large local models."
+  },
+  {
+    "id": "short_explain_08",
+    "category": "short_explain",
+    "max_tokens": 64,
+    "prompt": "In 4 sentences, explain the role of a compressor in refrigeration."
+  },
+  {
+    "id": "short_explain_09",
+    "category": "short_explain",
+    "max_tokens": 64,
+    "prompt": "In 4 sentences, explain why retries and resume support matter in multi-gigabyte downloads."
+  },
+  {
+    "id": "short_explain_10",
+    "category": "short_explain",
+    "max_tokens": 64,
+    "prompt": "In 4 sentences, explain what time to first token means for an interactive coding assistant."
+  },
+  {
+    "id": "structured_01",
+    "category": "structured",
+    "max_tokens": 128,
+    "prompt": "Explain how a heat pump works using exactly 6 numbered bullets. Each bullet must be one sentence."
+  },
+  {
+    "id": "structured_02",
+    "category": "structured",
+    "max_tokens": 128,
+    "prompt": "Describe the tradeoffs between 4-bit, 8-bit, and bf16 models using exactly 6 numbered bullets. Each bullet must be one sentence."
+  },
+  {
+    "id": "structured_03",
+    "category": "structured",
+    "max_tokens": 128,
+    "prompt": "List the steps to benchmark a local LLM using exactly 7 numbered bullets. Each bullet must be one sentence."
+  },
+  {
+    "id": "structured_04",
+    "category": "structured",
+    "max_tokens": 128,
+    "prompt": "Summarize the key components of a retrieval pipeline using exactly 6 numbered bullets. Each bullet must be one sentence."
+  },
+  {
+    "id": "structured_05",
+    "category": "structured",
+    "max_tokens": 128,
+    "prompt": "Explain how an HTTP request flows through a reverse proxy and app server using exactly 7 numbered bullets. Each bullet must be one sentence."
+  },
+  {
+    "id": "structured_06",
+    "category": "structured",
+    "max_tokens": 128,
+    "prompt": "Give a practical checklist for diagnosing slow downloads using exactly 8 numbered bullets. Each bullet must be one sentence."
+  },
+  {
+    "id": "structured_07",
+    "category": "structured",
+    "max_tokens": 128,
+    "prompt": "Explain the difference between prompt processing and token generation using exactly 6 numbered bullets. Each bullet must be one sentence."
+  },
+  {
+    "id": "structured_08",
+    "category": "structured",
+    "max_tokens": 128,
+    "prompt": "Describe how to evaluate whether an LLM benchmark is fair using exactly 7 numbered bullets. Each bullet must be one sentence."
+  },
+  {
+    "id": "structured_09",
+    "category": "structured",
+    "max_tokens": 128,
+    "prompt": "Explain how to compare two local machines for inference using exactly 7 numbered bullets. Each bullet must be one sentence."
+  },
+  {
+    "id": "structured_10",
+    "category": "structured",
+    "max_tokens": 128,
+    "prompt": "Describe the parts of a modern Mac used during LLM inference using exactly 7 numbered bullets. Each bullet must be one sentence."
+  },
+  {
+    "id": "code_01",
+    "category": "code",
+    "max_tokens": 256,
+    "prompt": "Write a Python function that streams a large file download with resume support and exponential backoff. Include docstring and basic error handling."
+  },
+  {
+    "id": "code_02",
+    "category": "code",
+    "max_tokens": 256,
+    "prompt": "Write a Python function that parses benchmark log lines of the form 'Generation: 128 tokens, 10.359 tokens-per-sec' and returns a dict."
+  },
+  {
+    "id": "code_03",
+    "category": "code",
+    "max_tokens": 256,
+    "prompt": "Write a shell script that checks whether a list of model shards exists and prints missing shard names. Keep it POSIX sh compatible."
+  },
+  {
+    "id": "code_04",
+    "category": "code",
+    "max_tokens": 256,
+    "prompt": "Write a Python script that loads a JSON prompt corpus and emits a CSV summary of id, category, and max_tokens."
+  },
+  {
+    "id": "code_05",
+    "category": "code",
+    "max_tokens": 256,
+    "prompt": "Write a Python function that computes averages and medians from a list of LLM benchmark results. Use only the standard library."
+  },
+  {
+    "id": "code_06",
+    "category": "code",
+    "max_tokens": 256,
+    "prompt": "Write a small Bash function that repeatedly pings a host, timestamps the results, and appends them to a log file."
+  },
+  {
+    "id": "code_07",
+    "category": "code",
+    "max_tokens": 256,
+    "prompt": "Write a Python class that represents a benchmark run with fields for prompt_tps, generation_tps, peak_memory_gb, and wall_time_s."
+  },
+  {
+    "id": "code_08",
+    "category": "code",
+    "max_tokens": 256,
+    "prompt": "Write a Python function that converts bytes per second into a human-readable string using binary units like KiB/s and MiB/s."
+  },
+  {
+    "id": "code_09",
+    "category": "code",
+    "max_tokens": 256,
+    "prompt": "Write a Python utility that groups benchmark records by category and prints a compact markdown table."
+  },
+  {
+    "id": "code_10",
+    "category": "code",
+    "max_tokens": 256,
+    "prompt": "Write a Python function that validates a benchmark prompt corpus and ensures each prompt has id, category, max_tokens, and prompt."
+  },
+  {
+    "id": "long_explain_01",
+    "category": "long_explain",
+    "max_tokens": 512,
+    "prompt": "Write a detailed explanation of how a heat pump works. Use clear section headings for absorption, compression, heat release, expansion, and reversing mode. End with a section on efficiency."
+  },
+  {
+    "id": "long_explain_02",
+    "category": "long_explain",
+    "max_tokens": 512,
+    "prompt": "Write a detailed explanation of how local LLM inference works on Apple Silicon, covering model weights, memory movement, prompt processing, generation, and bottlenecks."
+  },
+  {
+    "id": "long_explain_03",
+    "category": "long_explain",
+    "max_tokens": 512,
+    "prompt": "Write a detailed explanation of the tradeoffs between dense models, mixture-of-experts models, and quantized models for local deployment."
+  },
+  {
+    "id": "long_explain_04",
+    "category": "long_explain",
+    "max_tokens": 512,
+    "prompt": "Write a detailed explanation of how to benchmark LLM inference properly, including prompt choice, warmup, repeated runs, memory, concurrency, and reporting."
+  },
+  {
+    "id": "long_explain_05",
+    "category": "long_explain",
+    "max_tokens": 512,
+    "prompt": "Write a detailed explanation of how DNS failures and flaky connectivity can affect large-model downloads, and how resume support changes the outcome."
+  },
+  {
+    "id": "long_explain_06",
+    "category": "long_explain",
+    "max_tokens": 512,
+    "prompt": "Write a detailed explanation of the difference between benchmarking model quality and benchmarking inference performance."
+  },
+  {
+    "id": "long_explain_07",
+    "category": "long_explain",
+    "max_tokens": 512,
+    "prompt": "Write a detailed explanation of how a local coding assistant might use prompt throughput, generation throughput, and TTFT to feel fast or slow to a user."
+  },
+  {
+    "id": "long_explain_08",
+    "category": "long_explain",
+    "max_tokens": 512,
+    "prompt": "Write a detailed explanation of how to compare two machines for LLM inference in a way that avoids misleading conclusions."
+  },
+  {
+    "id": "long_explain_09",
+    "category": "long_explain",
+    "max_tokens": 512,
+    "prompt": "Write a detailed explanation of what happens when a large model is loaded from disk into memory and prepared for generation."
+  },
+  {
+    "id": "long_explain_10",
+    "category": "long_explain",
+    "max_tokens": 512,
+    "prompt": "Write a detailed explanation of the practical engineering tradeoffs between keeping a benchmark simple and making it comprehensive."
+  },
+  {
+    "id": "force_long_01",
+    "category": "force_long",
+    "max_tokens": 1000,
+    "prompt": "Produce exactly 40 numbered bullets explaining how a heat pump works, with each bullet containing 2 complete sentences and no bullet shorter than 20 words."
+  },
+  {
+    "id": "force_long_02",
+    "category": "force_long",
+    "max_tokens": 1000,
+    "prompt": "Produce exactly 35 numbered bullets on how to benchmark a local LLM, with each bullet containing 2 complete sentences and at least 18 words."
+  },
+  {
+    "id": "force_long_03",
+    "category": "force_long",
+    "max_tokens": 1000,
+    "prompt": "Write a 12-section guide to debugging unreliable large downloads. Each section must have a heading and a paragraph of at least 50 words."
+  },
+  {
+    "id": "force_long_04",
+    "category": "force_long",
+    "max_tokens": 1000,
+    "prompt": "Write a 12-section guide to evaluating local model performance on Apple Silicon. Each section must have a heading and a paragraph of at least 50 words."
+  },
+  {
+    "id": "force_long_05",
+    "category": "force_long",
+    "max_tokens": 1000,
+    "prompt": "Generate a long FAQ with 20 questions and 20 answers about running large MLX models locally. Each answer must be at least 35 words."
+  },
+  {
+    "id": "force_long_06",
+    "category": "force_long",
+    "max_tokens": 1000,
+    "prompt": "Generate a long FAQ with 20 questions and 20 answers about inference benchmarking. Each answer must be at least 35 words."
+  },
+  {
+    "id": "force_long_07",
+    "category": "force_long",
+    "max_tokens": 1000,
+    "prompt": "Write a tutorial with 15 numbered steps for setting up a reproducible local benchmark suite. Each step must include a reason and a common pitfall."
+  },
+  {
+    "id": "force_long_08",
+    "category": "force_long",
+    "max_tokens": 1000,
+    "prompt": "Write a tutorial with 15 numbered steps for comparing two machines for local LLM inference. Each step must include a reason and a common pitfall."
+  },
+  {
+    "id": "force_long_09",
+    "category": "force_long",
+    "max_tokens": 1000,
+    "prompt": "Produce a benchmark-style report with sections for methodology, workload, warmup, repeated runs, memory, throughput, anomalies, and conclusions. Each section must be at least 80 words."
+  },
+  {
+    "id": "force_long_10",
+    "category": "force_long",
+    "max_tokens": 1000,
+    "prompt": "Produce a benchmark-style report comparing short, medium, and long LLM completions. Include sections for observed behavior, hypotheses, and recommended follow-up tests. Each section must be at least 80 words."
+  }
+]

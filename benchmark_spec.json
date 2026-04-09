@@ -1,0 +1,13 @@
+{
+  "benchmark_id": "mlx-local-llm-benchmark",
+  "benchmark_version": "0.1.0",
+  "prompt_corpus_file": "benchmark_prompts_50.json",
+  "prompt_corpus_version": "0.1.0",
+  "runner_file": "mlx_benchmark_suite.py",
+  "runner_version": "0.1.0",
+  "notes": [
+    "Bump benchmark_version whenever benchmark behavior or reporting changes.",
+    "Bump prompt_corpus_version whenever prompts, categories, or max token settings change.",
+    "Bump runner_version whenever parsing, execution, or summarization changes."
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "benchmark": {
+    "benchmark_id": "mlx-local-llm-benchmark",
+    "benchmark_version": "0.1.0",
+    "prompt_corpus_file": "prompts/benchmark_prompts_50.json",
+    "prompt_corpus_version": "0.1.0",
+    "runner_file": "runners/mlx_benchmark_suite.py",
+    "runner_version": "0.1.0"
+  },
+  "run": {
+    "timestamp_utc": "2026-04-09T19:20:17Z",
+    "git_commit": null,
+    "host": {
+      "hostname": "SpeedfracStudio.lan",
+      "platform": "macOS 26.3",
+      "system": "Darwin",
+      "release": "25.3.0",
+      "machine": "arm64",
+      "python_version": "3.12.13"
+    }
+  },
+  "hardware": {
+    "host_label": "speedfreak",
+    "machine_class": "Mac Studio",
+    "soc": "Apple M3 Ultra",
+    "memory_gb": 512
+  },
+  "runtime": {
+    "family": "mlx-vlm",
+    "python_env": "/Users/speedfreak/llm/mlx-gemma31/.venv",
+    "model_path": "/Users/speedfreak/llm/models/gemma-4-31b-it-bf16",
+    "model_source": "mlx-community/gemma-4-31b-it-bf16",
+    "mlx_version": "0.31.1",
+    "mlx_lm_version": "0.31.2",
+    "mlx_vlm_version": "0.4.4"
+  },
+  "workload": {
+    "prompt": "Write a short explanation of how a heat pump works.",
+    "temperature": 0.0
+  },
+  "results": [
+    {
+      "name": "single_128_direct",
+      "prompt_tokens": 69,
+      "prompt_tps": 49.201,
+      "generation_tokens": 128,
+      "generation_tps": 10.359,
+      "peak_memory_gb": 62.853
+    },
+    {
+      "name": "repeat_64_1",
+      "prompt_tokens": 24,
+      "prompt_tps": 34.66,
+      "generation_tokens": 64,
+      "generation_tps": 10.45,
+      "peak_memory_gb": 62.813
+    },
+    {
+      "name": "repeat_64_2",
+      "prompt_tokens": 24,
+      "prompt_tps": 35.655,
+      "generation_tokens": 64,
+      "generation_tps": 10.444,
+      "peak_memory_gb": 62.813
+    },
+    {
+      "name": "repeat_128_1",
+      "prompt_tokens": 24,
+      "prompt_tps": 35.715,
+      "generation_tokens": 128,
+      "generation_tps": 10.35,
+      "peak_memory_gb": 62.813
+    },
+    {
+      "name": "repeat_128_2",
+      "prompt_tokens": 24,
+      "prompt_tps": 36.124,
+      "generation_tokens": 128,
+      "generation_tps": 10.344,
+      "peak_memory_gb": 62.813
+    },
+    {
+      "name": "repeat_256_1",
+      "prompt_tokens": 24,
+      "prompt_tps": 33.303,
+      "generation_tokens": 256,
+      "generation_tps": 5.676,
+      "peak_memory_gb": 62.826
+    },
+    {
+      "name": "long_natural_completion",
+      "requested_max_tokens": 1000,
+      "prompt_tokens": 24,
+      "prompt_tps": 14.029,
+      "generation_tokens": 447,
+      "generation_tps": 7.019,
+      "peak_memory_gb": 63.057,
+      "note": "Run stopped naturally before 1000 generated tokens."
+    }
+  ]
+}
