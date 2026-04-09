@@ -21,7 +21,7 @@ except ImportError:
     print("openai package required: pip install openai", file=sys.stderr)
     sys.exit(1)
 
-RUNNER_VERSION = "0.2.0"
+RUNNER_VERSION = "0.3.0"
 
 
 def parse_args() -> argparse.Namespace:
@@ -75,6 +75,18 @@ def parse_args() -> argparse.Namespace:
     conc_group.add_argument(
         "--concurrency-sweep", default=None,
         help="Comma-separated concurrency levels to run in sequence, e.g. 1,4,8,16",
+    )
+    conc_group.add_argument(
+        "--concurrency-auto", action="store_true", default=False,
+        help="Auto-sweep concurrency doubling from --concurrency-start until aggregate TPS saturates",
+    )
+    parser.add_argument(
+        "--concurrency-start", type=int, default=1,
+        help="Starting concurrency for --concurrency-auto (default 1)",
+    )
+    parser.add_argument(
+        "--saturation-threshold", type=float, default=0.05,
+        help="--concurrency-auto stops when TPS improvement drops below this fraction (default 0.05 = 5%%)",
     )
 
     return parser.parse_args()
@@ -311,22 +323,62 @@ async def main_async() -> int:
 
     gpus_used = args.hw_gpus_used if args.hw_gpus_used is not None else args.model_tp
 
-    if args.concurrency_sweep:
-        levels = [int(x.strip()) for x in args.concurrency_sweep.split(",")]
-    else:
-        levels = [args.concurrency]
-
     client = AsyncOpenAI(api_key="local", base_url=args.api_base)
 
     all_summaries = []
     all_results = []
 
-    for level in levels:
-        print(f"\n--- concurrency={level} ({len(prompts)} prompts × {args.repeats} repeat(s)) ---", flush=True)
-        results, wall_time, aggregate_tps = await run_all(client, args.model, prompts, level, args.repeats)
-        summary = build_summary(results, level, wall_time, aggregate_tps)
-        all_summaries.append(summary)
-        all_results.extend(results)
+    if args.concurrency_sweep:
+        levels = [int(x.strip()) for x in args.concurrency_sweep.split(",")]
+    elif args.concurrency_auto:
+        levels = None  # determined dynamically below
+    else:
+        levels = [args.concurrency]
+
+    if levels is not None:
+        for level in levels:
+            print(f"\n--- concurrency={level} ({len(prompts)} prompts × {args.repeats} repeat(s)) ---", flush=True)
+            results, wall_time, aggregate_tps = await run_all(client, args.model, prompts, level, args.repeats)
+            summary = build_summary(results, level, wall_time, aggregate_tps)
+            all_summaries.append(summary)
+            all_results.extend(results)
+    else:
+        # auto mode: double concurrency until aggregate TPS plateaus
+        level = args.concurrency_start
+        prev_tps = None
+        confirmed_flat = False
+        MAX_CONCURRENCY = 2048
+
+        while level <= MAX_CONCURRENCY:
+            print(
+                f"\n--- concurrency={level} ({len(prompts)} prompts × {args.repeats} repeat(s)) "
+                f"[auto] ---",
+                flush=True,
+            )
+            results, wall_time, aggregate_tps = await run_all(client, args.model, prompts, level, args.repeats)
+            summary = build_summary(results, level, wall_time, aggregate_tps)
+            all_summaries.append(summary)
+            all_results.extend(results)
+
+            if prev_tps is not None and aggregate_tps is not None:
+                improvement = (aggregate_tps - prev_tps) / prev_tps
+                print(
+                    f"  [auto] improvement={improvement:.1%} vs previous "
+                    f"(threshold={args.saturation_threshold:.0%})",
+                    flush=True,
+                )
+                if improvement < args.saturation_threshold:
+                    if confirmed_flat:
+                        print(f"  [auto] saturated — stopping after c={level}", flush=True)
+                        break
+                    else:
+                        print(f"  [auto] below threshold — running one confirmation step", flush=True)
+                        confirmed_flat = True
+                else:
+                    confirmed_flat = False
+
+            prev_tps = aggregate_tps
+            level *= 2
 
     payload = {
         "benchmark": spec,
@@ -357,6 +409,11 @@ async def main_async() -> int:
         "spec_file": str(Path(args.spec).resolve()),
         "prompts_per_category": args.max_per_category or "all",
         "repeats": args.repeats,
+        "concurrency_mode": "auto" if args.concurrency_auto else ("sweep" if args.concurrency_sweep else "fixed"),
+        "concurrency_auto_config": {
+            "start": args.concurrency_start,
+            "saturation_threshold": args.saturation_threshold,
+        } if args.concurrency_auto else None,
         "results": all_results,
         "summaries": all_summaries,
     }
@@ -373,8 +430,9 @@ async def main_async() -> int:
     print(
         f"machine={args.hw_machine}  gpus_used={gpus_used}  hostname={platform.node()}"
     )
+    mode = "auto" if args.concurrency_auto else ("sweep" if args.concurrency_sweep else f"c={args.concurrency}")
     print(
-        f"prompts={len(prompts)} ({args.max_per_category or 'all'}/category)  repeats={args.repeats}"
+        f"prompts={len(prompts)} ({args.max_per_category or 'all'}/category)  repeats={args.repeats}  mode={mode}"
     )
     for s in all_summaries:
         print_summary(s)
