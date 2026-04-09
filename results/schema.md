@@ -1,23 +1,23 @@
 # Results Schema
 
 Every result JSON file should contain the following top-level fields.
-Runners are expected to populate all fields they can; use `null` for fields
-that are not available from their backend.
+Runners populate all fields they can; use `null` for fields not available from their backend.
 
 ## Top-level structure
 
 ```json
 {
-  "benchmark":   { ... },
-  "run":         { ... },
-  "runtime":     { ... },
-  "model":       { ... },
-  "hardware":    { ... },
-  "prompt_file": "...",
-  "spec_file":   "...",
-  "repeats":     1,
-  "results":     [ ... ],
-  "summary":     [ ... ]
+  "benchmark":            { ... },
+  "run":                  { ... },
+  "runtime":              { ... },
+  "model":                { ... },
+  "hardware":             { ... },
+  "prompt_file":          "...",
+  "spec_file":            "...",
+  "prompts_per_category": 3,
+  "repeats":              1,
+  "results":              [ ... ],
+  "summaries":            [ ... ]
 }
 ```
 
@@ -41,6 +41,7 @@ Execution context.
 |-------|------|-------------|
 | `timestamp_utc` | ISO 8601 string | Wall-clock start of run |
 | `git_commit` | string \| null | Git HEAD of the speedllmit repo at run time |
+| `runner_version` | string | Version of the runner script used |
 | `host` | object | Full `platform` metadata (hostname, OS, arch, Python version, etc.) |
 | `api_base` | string \| null | Endpoint URL (openai_compat runner only) |
 
@@ -67,12 +68,16 @@ What model is loaded and how.
 
 ## `hardware`
 
-The machine and accelerator.
+The machine and how many accelerators this run actually used.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `label` | string \| null | Human-readable description, e.g. `8x A100-SXM4-80GB` or `M4 Max 128GB` |
+| `machine` | string \| null | Full machine accelerator inventory, e.g. `8x A100-SXM4-80GB`. Documents what the machine *has*, not what this run *uses*. |
+| `gpus_used` | int \| null | Number of GPUs actually used for this run. Derived from `tensor_parallel` unless explicitly overridden. |
 | `hostname` | string | Machine hostname |
+
+**Important:** `machine` and `gpus_used` serve different purposes. A machine with 8 GPUs running a
+TP=1 model uses 1 GPU. Always record both so results are unambiguous.
 
 ## Per-run result fields (`results[]`)
 
@@ -85,43 +90,67 @@ The machine and accelerator.
 | `elapsed_s` | float | Total wall time for this call |
 | `prompt_tokens` | int \| null | Tokens in the prompt |
 | `prompt_tps` | float \| null | Prompt processing speed (tokens/sec) |
-| `prompt_tps_source` | string \| null | How prompt_tps was measured: `native` (runtime reported) or `estimated_from_ttft` |
+| `prompt_tps_source` | string \| null | `native` (runtime reported) or `estimated_from_ttft` |
 | `generation_tokens` | int \| null | Tokens generated |
-| `generation_tps` | float \| null | Generation throughput (tokens/sec) |
+| `generation_tps` | float \| null | Generation throughput (tokens/sec) — single-request view |
 | `ttft_s` | float \| null | Time to first token (seconds); openai_compat runner only |
 | `peak_memory_gb` | float \| null | Peak memory (GB); MLX runner only |
 | `error` | string \| null | Error message if the call failed |
 
-## Summary fields (`summary[]`)
+## Summary fields (`summaries[]`)
 
-Grouped by `(category, max_tokens)`.
+One entry per concurrency level. For a serial run (`--concurrency 1`) there is one entry.
+For a sweep (`--concurrency-sweep 1,4,8,16`) there is one entry per level.
+
+### Top-level summary fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `concurrency` | int | Number of simultaneous requests for this entry |
+| `wall_time_s` | float | Total wall time from first dispatch to last completion |
+| `aggregate_generation_tps` | float \| null | Total tokens generated / wall time — true server throughput |
+
+### `per_category[]` fields (always present)
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `category` | string | |
 | `max_tokens` | int | |
 | `runs` | int | Number of calls in this group |
-| `avg_generation_tps` | float \| null | Mean generation throughput |
+| `avg_generation_tps` | float \| null | Mean per-request generation throughput |
 | `avg_ttft_s` | float \| null | Mean time to first token |
 | `avg_generation_tokens` | float \| null | Mean tokens actually generated |
+
+### `per_category[]` fields (concurrency > 1 only)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `p50_generation_tps` | float \| null | Median per-request generation throughput |
+| `p95_generation_tps` | float \| null | p95 per-request generation throughput |
+| `p50_ttft_s` | float \| null | Median TTFT |
+| `p95_ttft_s` | float \| null | p95 TTFT |
+| `p99_ttft_s` | float \| null | p99 TTFT |
 
 ## Notes on cross-runner comparison
 
 - **`prompt_tps`**: MLX reports this natively; the openai_compat runner estimates it
   from TTFT and marks it `estimated_from_ttft`. Do not compare these directly.
 - **`peak_memory_gb`**: Only available from the MLX runner. Not queryable via API.
-- **`ttft_s`**: Only the openai_compat runner measures this. MLX subprocess calls
-  do not isolate TTFT.
-- For apples-to-apples comparison across runtimes, use `avg_generation_tps` and
-  `avg_generation_tokens`. Everything else is backend-specific.
+- **`ttft_s`**: Only the openai_compat runner measures this.
+- **`aggregate_generation_tps`**: The most useful throughput metric for server comparison.
+  At concurrency=1 it equals `avg_generation_tps`. At higher concurrency it reflects
+  the server's batching efficiency.
+- For apples-to-apples comparison across runtimes, use `aggregate_generation_tps` and
+  `avg_generation_tps`. Everything else is backend-specific.
 
 ## Result filename convention
 
 ```
-results/<hostname>_<model>_<runtime>_<dtype>_<date>.json
+results/<hostname>_<model>_<runtime>_<dtype>_tp<N>_c<concurrency>_<date>.json
 ```
 
 Examples:
-- `results/speedfreak_gemma4_31b_mlx_bf16_2026-04-09.json`
-- `results/a100_gemma4_31b_vllm_bf16_tp1_2026-04-09.json`
-- `results/a100_gemma4_31b_sglang_bf16_tp2_2026-04-09.json`
+- `results/a100_gemma4_31b_vllm_bf16_tp1_c1_2026-04-09.json`   ← serial, 1 GPU
+- `results/a100_gemma4_31b_vllm_bf16_tp1_c16_2026-04-09.json`  ← 16 concurrent, 1 GPU
+- `results/a100_gemma4_31b_sglang_bf16_tp2_c8_2026-04-09.json` ← 8 concurrent, 2 GPUs
+- `results/speedfreak_gemma4_31b_mlx_bf16_tp1_c1_2026-04-09.json`

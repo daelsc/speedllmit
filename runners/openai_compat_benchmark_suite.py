@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import platform
@@ -15,10 +16,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 try:
-    from openai import OpenAI
+    from openai import AsyncOpenAI
 except ImportError:
     print("openai package required: pip install openai", file=sys.stderr)
     sys.exit(1)
+
+RUNNER_VERSION = "0.2.0"
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,25 +38,49 @@ def parse_args() -> argparse.Namespace:
 
     # model metadata
     parser.add_argument("--model", required=True, help="Model name as served, e.g. gemma-4-31b")
-    parser.add_argument("--model-dtype", default=None, help="Model dtype, e.g. bfloat16, float16, int4")
-    parser.add_argument("--model-quant", default=None, help="Quantization scheme if applicable, e.g. AWQ, GPTQ, Q4_K_M")
+    parser.add_argument("--model-dtype", default=None, help="Weight dtype, e.g. bfloat16, float16, int4")
+    parser.add_argument("--model-quant", default=None, help="Quantization scheme, e.g. AWQ, GPTQ, Q4_K_M")
     parser.add_argument("--model-tp", type=int, default=None, help="Tensor parallel size")
     parser.add_argument("--model-max-ctx", type=int, default=None, help="Configured max context length")
 
-    # hardware metadata (free-form; auto-populated from platform but overridable)
-    parser.add_argument("--hw-label", default=None, help="Human-readable hardware label, e.g. '8x A100-SXM4-80GB'")
+    # hardware metadata
+    parser.add_argument(
+        "--hw-machine", default=None,
+        help="Full machine accelerator inventory, e.g. '8x A100-SXM4-80GB'. "
+             "Documents what the machine has, not what this run uses.",
+    )
+    parser.add_argument(
+        "--hw-gpus-used", type=int, default=None,
+        help="Number of GPUs actually used for this run. Defaults to --model-tp if set.",
+    )
 
     # benchmark inputs
     parser.add_argument("--prompts", default="benchmark_prompts_50.json", help="Prompt corpus JSON")
     parser.add_argument("--spec", default="benchmark_spec.json", help="Benchmark spec JSON")
     parser.add_argument("--repeats", type=int, default=1)
+    parser.add_argument(
+        "--max-per-category", type=int, default=3,
+        help="Max prompts per category to run (default 3). Use 0 for all.",
+    )
     parser.add_argument("--output-json", default="benchmark_results.json")
     parser.add_argument("--categories", nargs="*")
     parser.add_argument("--ids", nargs="*")
+
+    # concurrency
+    conc_group = parser.add_mutually_exclusive_group()
+    conc_group.add_argument(
+        "--concurrency", type=int, default=1,
+        help="Number of simultaneous requests (default 1 = serial)",
+    )
+    conc_group.add_argument(
+        "--concurrency-sweep", default=None,
+        help="Comma-separated concurrency levels to run in sequence, e.g. 1,4,8,16",
+    )
+
     return parser.parse_args()
 
 
-def load_prompts(path: Path) -> list[dict]:
+def load_prompts(path: Path) -> list:
     with path.open("r", encoding="utf-8") as f:
         prompts = json.load(f)
     for item in prompts:
@@ -68,11 +95,7 @@ def load_spec(path: Path) -> dict:
         return json.load(f)
 
 
-def filter_prompts(
-    prompts: list[dict],
-    categories: set[str] | None,
-    ids: set[str] | None,
-) -> list[dict]:
+def filter_prompts(prompts: list, categories, ids, max_per_category: int) -> list:
     filtered = []
     for item in prompts:
         if categories and item["category"] not in categories:
@@ -80,17 +103,21 @@ def filter_prompts(
         if ids and item["id"] not in ids:
             continue
         filtered.append(item)
+
+    if max_per_category:
+        by_cat: dict = {}
+        for item in filtered:
+            by_cat.setdefault(item["category"], []).append(item)
+        filtered = []
+        for cat_items in by_cat.values():
+            filtered.extend(cat_items[:max_per_category])
+
     return filtered
 
 
-def get_git_commit() -> str | None:
+def get_git_commit():
     try:
-        proc = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        proc = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False)
     except OSError:
         return None
     return proc.stdout.strip() or None
@@ -110,16 +137,25 @@ def get_host_metadata() -> dict:
     }
 
 
-def run_case(client: OpenAI, model: str, prompt_item: dict) -> dict:
+def pct(data: list, p: int):
+    """Return the p-th percentile of data (p in 0–100)."""
+    if not data:
+        return None
+    s = sorted(data)
+    idx = max(0, min(int(len(s) * p / 100), len(s) - 1))
+    return round(s[idx], 3)
+
+
+async def run_case(client: AsyncOpenAI, model: str, prompt_item: dict) -> dict:
     start = time.perf_counter()
-    first_token_time: float | None = None
-    end_time: float | None = None
-    prompt_tokens: int | None = None
-    generation_tokens: int | None = None
-    error: str | None = None
+    first_token_time = None
+    end_time = None
+    prompt_tokens = None
+    generation_tokens = None
+    error = None
 
     try:
-        stream = client.chat.completions.create(
+        stream = await client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt_item["prompt"]}],
             max_tokens=prompt_item["max_tokens"],
@@ -127,7 +163,7 @@ def run_case(client: OpenAI, model: str, prompt_item: dict) -> dict:
             stream=True,
             stream_options={"include_usage": True},
         )
-        for chunk in stream:
+        async for chunk in stream:
             now = time.perf_counter()
             if first_token_time is None and chunk.choices and chunk.choices[0].delta.content:
                 first_token_time = now
@@ -140,10 +176,8 @@ def run_case(client: OpenAI, model: str, prompt_item: dict) -> dict:
         end_time = time.perf_counter()
 
     elapsed = round(end_time - start, 3) if end_time else None
-
     ttft_s = None
     generation_tps = None
-    # prompt_tps is estimated from TTFT — less reliable than MLX's native measurement
     prompt_tps_estimated = None
 
     if first_token_time is not None:
@@ -169,29 +203,99 @@ def run_case(client: OpenAI, model: str, prompt_item: dict) -> dict:
     }
 
 
-def summarize(results: list[dict]) -> list[dict]:
-    groups: dict[tuple[str, int], list[dict]] = {}
-    for result in results:
-        key = (result["category"], result["max_tokens"])
-        groups.setdefault(key, []).append(result)
+async def run_all(
+    client: AsyncOpenAI, model: str, prompts: list, concurrency: int, repeats: int
+) -> tuple:
+    """Run all prompts at the given concurrency. Returns (results, wall_time_s, aggregate_tps)."""
+    tasks = [(prompt_item, r) for prompt_item in prompts for r in range(1, repeats + 1)]
+    total = len(tasks)
+    results = [None] * total
+    sem = asyncio.Semaphore(concurrency)
 
-    summary = []
+    async def bounded(idx: int, prompt_item: dict, repeat: int) -> None:
+        async with sem:
+            result = await run_case(client, model, prompt_item)
+            result["repeat"] = repeat
+            results[idx] = result
+            print(
+                f"[{idx + 1}/{total}] {prompt_item['id']} cat={prompt_item['category']} "
+                f"max_tokens={prompt_item['max_tokens']} repeat={repeat} "
+                f"gen_tps={result['generation_tps']} ttft_s={result['ttft_s']} "
+                f"gen_tokens={result['generation_tokens']}"
+                + (f" ERROR={result['error']}" if result["error"] else ""),
+                flush=True,
+            )
+
+    wall_start = time.perf_counter()
+    await asyncio.gather(*[bounded(i, p, r) for i, (p, r) in enumerate(tasks)])
+    wall_time = round(time.perf_counter() - wall_start, 3)
+
+    total_gen_tokens = sum(r["generation_tokens"] for r in results if r and r["generation_tokens"])
+    aggregate_tps = round(total_gen_tokens / wall_time, 3) if wall_time > 0 else None
+
+    return results, wall_time, aggregate_tps
+
+
+def build_summary(results: list, concurrency: int, wall_time: float, aggregate_tps) -> dict:
+    groups: dict = {}
+    for r in results:
+        key = (r["category"], r["max_tokens"])
+        groups.setdefault(key, []).append(r)
+
+    per_category = []
     for (category, max_tokens), rows in sorted(groups.items()):
         gen_tps = [r["generation_tps"] for r in rows if r["generation_tps"] is not None]
         ttft = [r["ttft_s"] for r in rows if r["ttft_s"] is not None]
         emitted = [r["generation_tokens"] for r in rows if r["generation_tokens"] is not None]
-        summary.append({
+
+        entry: dict = {
             "category": category,
             "max_tokens": max_tokens,
             "runs": len(rows),
             "avg_generation_tps": round(statistics.mean(gen_tps), 3) if gen_tps else None,
             "avg_ttft_s": round(statistics.mean(ttft), 3) if ttft else None,
             "avg_generation_tokens": round(statistics.mean(emitted), 1) if emitted else None,
-        })
-    return summary
+        }
+        if concurrency > 1:
+            entry.update({
+                "p50_generation_tps": pct(gen_tps, 50),
+                "p95_generation_tps": pct(gen_tps, 95),
+                "p50_ttft_s": pct(ttft, 50),
+                "p95_ttft_s": pct(ttft, 95),
+                "p99_ttft_s": pct(ttft, 99),
+            })
+        per_category.append(entry)
+
+    return {
+        "concurrency": concurrency,
+        "wall_time_s": wall_time,
+        "aggregate_generation_tps": aggregate_tps,
+        "per_category": per_category,
+    }
 
 
-def main() -> int:
+def print_summary(s: dict) -> None:
+    print(
+        f"\nconcurrency={s['concurrency']}  "
+        f"wall={s['wall_time_s']}s  "
+        f"aggregate_tps={s['aggregate_generation_tps']}"
+    )
+    for row in s["per_category"]:
+        line = (
+            f"  {row['category']:>14} max_tokens={row['max_tokens']:<4} "
+            f"avg_gen_tps={row['avg_generation_tps']} "
+            f"avg_ttft_s={row['avg_ttft_s']} "
+            f"avg_gen_tokens={row['avg_generation_tokens']}"
+        )
+        if s["concurrency"] > 1:
+            line += (
+                f"  p95_gen_tps={row.get('p95_generation_tps')} "
+                f"p95_ttft_s={row.get('p95_ttft_s')}"
+            )
+        print(line)
+
+
+async def main_async() -> int:
     args = parse_args()
     prompts = load_prompts(Path(args.prompts))
     spec = load_spec(Path(args.spec))
@@ -199,35 +303,30 @@ def main() -> int:
         prompts,
         set(args.categories) if args.categories else None,
         set(args.ids) if args.ids else None,
+        args.max_per_category,
     )
     if not prompts:
         print("No prompts selected.", file=sys.stderr)
         return 1
 
-    client = OpenAI(api_key="local", base_url=args.api_base)
+    gpus_used = args.hw_gpus_used if args.hw_gpus_used is not None else args.model_tp
 
-    results = []
-    total = len(prompts) * args.repeats
-    run_index = 0
+    if args.concurrency_sweep:
+        levels = [int(x.strip()) for x in args.concurrency_sweep.split(",")]
+    else:
+        levels = [args.concurrency]
 
-    for prompt_item in prompts:
-        for repeat in range(1, args.repeats + 1):
-            run_index += 1
-            print(
-                f"[{run_index}/{total}] {prompt_item['id']} category={prompt_item['category']} "
-                f"max_tokens={prompt_item['max_tokens']} repeat={repeat}",
-                flush=True,
-            )
-            result = run_case(client, args.model, prompt_item)
-            result["repeat"] = repeat
-            results.append(result)
-            print(
-                f"  prompt_tps={result['prompt_tps']} generation_tps={result['generation_tps']} "
-                f"generation_tokens={result['generation_tokens']} ttft_s={result['ttft_s']} "
-                f"elapsed_s={result['elapsed_s']}"
-                + (f" ERROR={result['error']}" if result["error"] else ""),
-                flush=True,
-            )
+    client = AsyncOpenAI(api_key="local", base_url=args.api_base)
+
+    all_summaries = []
+    all_results = []
+
+    for level in levels:
+        print(f"\n--- concurrency={level} ({len(prompts)} prompts × {args.repeats} repeat(s)) ---", flush=True)
+        results, wall_time, aggregate_tps = await run_all(client, args.model, prompts, level, args.repeats)
+        summary = build_summary(results, level, wall_time, aggregate_tps)
+        all_summaries.append(summary)
+        all_results.extend(results)
 
     payload = {
         "benchmark": spec,
@@ -236,6 +335,7 @@ def main() -> int:
             "git_commit": get_git_commit(),
             "host": get_host_metadata(),
             "api_base": args.api_base,
+            "runner_version": RUNNER_VERSION,
         },
         "runtime": {
             "name": args.runtime,
@@ -249,43 +349,42 @@ def main() -> int:
             "max_context": args.model_max_ctx,
         },
         "hardware": {
-            "label": args.hw_label,
+            "machine": args.hw_machine,
+            "gpus_used": gpus_used,
             "hostname": platform.node(),
         },
         "prompt_file": str(Path(args.prompts).resolve()),
         "spec_file": str(Path(args.spec).resolve()),
+        "prompts_per_category": args.max_per_category or "all",
         "repeats": args.repeats,
-        "results": results,
-        "summary": summarize(results),
+        "results": all_results,
+        "summaries": all_summaries,
     }
 
     output_path = Path(args.output_json)
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
 
-    print("\nSummary")
+    print("\n=== Summary ===")
     print(
-        f"benchmark_id={spec.get('benchmark_id')} "
-        f"benchmark_version={spec.get('benchmark_version')} "
-        f"runner=openai_compat-0.1.0"
+        f"runtime={args.runtime} {args.runtime_version}  "
+        f"model={args.model}  dtype={args.model_dtype}  tp={args.model_tp}"
     )
     print(
-        f"runtime={args.runtime} version={args.runtime_version} "
-        f"model={args.model} dtype={args.model_dtype} tp={args.model_tp}"
+        f"machine={args.hw_machine}  gpus_used={gpus_used}  hostname={platform.node()}"
     )
     print(
-        f"hardware={args.hw_label or platform.node()} "
-        f"timestamp_utc={payload['run']['timestamp_utc']} "
-        f"git_commit={payload['run']['git_commit']}"
+        f"prompts={len(prompts)} ({args.max_per_category or 'all'}/category)  repeats={args.repeats}"
     )
-    for row in payload["summary"]:
-        print(
-            f"{row['category']:>14} max_tokens={row['max_tokens']:<4} runs={row['runs']:<2} "
-            f"avg_generation_tps={row['avg_generation_tps']} avg_ttft_s={row['avg_ttft_s']} "
-            f"avg_generation_tokens={row['avg_generation_tokens']}"
-        )
+    for s in all_summaries:
+        print_summary(s)
+
     print(f"\nWrote {output_path}")
     return 0
+
+
+def main() -> int:
+    return asyncio.run(main_async())
 
 
 if __name__ == "__main__":
