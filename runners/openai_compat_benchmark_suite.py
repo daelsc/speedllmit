@@ -360,7 +360,7 @@ async def main_async() -> int:
             all_summaries.append(summary)
             all_results.extend(results)
 
-            if prev_tps is not None and aggregate_tps is not None:
+            if prev_tps is not None and prev_tps > 0 and aggregate_tps is not None:
                 improvement = (aggregate_tps - prev_tps) / prev_tps
                 print(
                     f"  [auto] improvement={improvement:.1%} vs previous "
